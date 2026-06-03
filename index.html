@@ -114,6 +114,7 @@
       const [cashFlows, setCashFlows] = useLocalStorage('lapak_cashflows', []); 
       
       const isInitialMount = useRef(true);
+      const isSaving = useRef(false);
 
       // URL Web App GAS (GANTI DENGAN URL WEB APP MILIK ANDA)
       const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbyL7GEYbTjhqDh-4zRSb4JphL3R3C2aT_6gPbYBC5wp6iab3tnDM6Vt5A2wl6tZS9ox/exec';
@@ -141,6 +142,34 @@
         }
       }, []);
 
+      // Auto-reload data (Polling) setiap 10 detik (Tanpa Logout)
+      useEffect(() => {
+        if (!GAS_API_URL || GAS_API_URL === 'MASUKKAN_URL_WEB_APP_GAS_DISINI') return;
+
+        const intervalId = setInterval(() => {
+          // Jangan muat ulang jika sistem sedang menyimpan agar data lokal yang baru diinput tidak tertimpa
+          if (isSaving.current) return;
+
+          fetch(GAS_API_URL + '?t=' + Date.now(), { cache: 'no-store' })
+            .then(res => res.json())
+            .then(resData => {
+              if (resData.status === 'success' && resData.data) {
+                try {
+                  const cloudData = JSON.parse(resData.data);
+                  if(cloudData.products) setProducts(cloudData.products);
+                  if(cloudData.transactions) setTransactions(cloudData.transactions);
+                  if(cloudData.purchases) setPurchases(cloudData.purchases);
+                  if(cloudData.cashFlows) setCashFlows(cloudData.cashFlows);
+                  if(cloudData.operators) setOperators(cloudData.operators);
+                } catch(e) {}
+              }
+            })
+            .catch(err => console.log('Gagal auto-reload di latar belakang', err));
+        }, 10000); // 10000 ms = 10 detik
+
+        return () => clearInterval(intervalId);
+      }, []);
+
       // Simpan Data Otomatis ke Google Drive
       useEffect(() => {
         if (isInitialMount.current) {
@@ -149,6 +178,7 @@
         }
 
         if (GAS_API_URL && GAS_API_URL !== 'MASUKKAN_URL_WEB_APP_GAS_DISINI') {
+          isSaving.current = true;
           setSyncStatus('Menyimpan...');
           const timer = setTimeout(() => {
             const allData = { products, transactions, purchases, cashFlows, operators };
@@ -159,12 +189,19 @@
             })
             .then(res => res.json())
             .then((resData) => {
+              isSaving.current = false;
               if(resData.status === 'success') setSyncStatus('Tersinkronisasi ☁️');
               else setSyncStatus('Gagal Simpan ❌');
             })
-            .catch(() => setSyncStatus('Gagal Simpan ❌'));
+            .catch(() => {
+              isSaving.current = false;
+              setSyncStatus('Gagal Simpan ❌');
+            });
           }, 1500); 
-          return () => clearTimeout(timer);
+          return () => {
+            clearTimeout(timer);
+            isSaving.current = false;
+          };
         }
       }, [products, transactions, purchases, cashFlows, operators]);
 
