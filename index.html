@@ -165,7 +165,7 @@
               }
             })
             .catch(err => console.log('Gagal auto-reload di latar belakang', err));
-        }, 10000); // 10000 ms = 10 detik
+        }, 40000); // 40000 ms = 40 detik
 
         return () => clearInterval(intervalId);
       }, []);
